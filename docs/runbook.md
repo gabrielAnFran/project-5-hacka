@@ -40,7 +40,7 @@ curl -s localhost:8081/api/v1/videos/<video_id>/download -H "Authorization: Bear
 # 6. Conferir e-mail recebido em http://localhost:8025
 
 # 7. (opcional) inspecionar o estado da saga
-curl -s localhost:8084/sagas/<video_id> | jq
+curl -s localhost:8084/api/v1/sagas/<video_id> | jq
 ```
 
 Para demonstrar o caminho de falha, subir um arquivo que não é um vídeo

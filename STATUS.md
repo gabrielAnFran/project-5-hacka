@@ -1,6 +1,6 @@
-# Status — FIAP X Video Processing (retomar aqui amanhã)
+# Status — FIAP X Video Processing (retomar aqui)
 
-Última atualização: 2026-09-25.
+Última atualização: 2026-09-26.
 
 ## O que é isto
 
@@ -26,35 +26,52 @@ Todos em `/Users/franz/development/pos/`, como diretórios irmãos:
 
 ## O que já está PRONTO e verificado
 
-- Os 4 serviços Go: escrito, `gofmt`/`go vet`/`go build` (todos os binários `cmd/{server,worker,outbox-dispatcher}`, exceto notification que não tem dispatcher)/`go test` — **tudo verde** em cada repo.
-- Contrato de eventos conferido campo-a-campo nos 4 saltos (`video.uploaded` → saga → `video.process.requested` → processing → `video.processing.completed|failed` → saga → `video.status.completed|failed` + `video.notify.requested` → upload/notification) — **nomes de evento e campos JSON batem exatamente** entre produtor e consumidor em todos os casos, conferido via grep direto no código, não apenas confiando no relato dos agentes que escreveram cada serviço.
-- `amqp.go` é byte-a-byte idêntico nos 4 repos (confirmado via `diff`).
-- Helm charts das 4 repos: **`helm lint` passa limpo** em todos (só um aviso informativo de "icon is recommended").
-- 2 bugs reais encontrados e corrigidos durante a revisão:
-  1. `go.mod` de todos os 4 repos foi resolvido para Go 1.25/1.26 pelo `go mod tidy` (por causa do `aws-sdk-go-v2` e deps transitivas), mas os `Dockerfile` ainda apontavam `golang:1.23-*` no estágio de build — corrigido para `golang:1.26-*`/`golang:1.26-bookworm` nos 4 repos.
-  2. `docker-compose.yml` (em `fiapx-saga-orchestrator/deploy/local/`) tinha o build context do notification-service apontando para `../../../fiapx-notification-service` (faltava `-video-`) — corrigido para `../../../fiapx-video-notification-service`.
-- Todos os 5 repos com working tree limpo após essas correções.
+- **Golden path rodado de ponta a ponta de verdade via `docker compose up`** (não só estaticamente): registro → login → upload → `UPLOADED`→`PROCESSING`→`COMPLETED` (~1.7s, 3 frames extraídos) → saga history correta (`GET /api/v1/sagas/:video_id` no saga-orchestrator, porta 8084) → e-mail de conclusão chegou no Mailhog → download URL presigned funciona do host e o `.zip` baixado contém os 3 frames + `original.mp4`.
+- **Caminho de falha também verificado de ponta a ponta**: upload de um arquivo inválido (`.txt` renomeado `.mp4`) → ffmpeg falha → status `FAILED` com `error_message` real do ffmpeg → e-mail de falha chegou no Mailhog.
+- Todas as filas do RabbitMQ (management UI, porta 15672) dreram limpo após o fluxo — 0 mensagens nas DLQs, confirmando outbox + idempotência funcionando.
+- Os 4 serviços Go: `gofmt`/`go vet`/`go build`/`go test` — verde em cada repo. Teste de integração real do ffmpeg (`fiapx-video-processing-service/tests/integration/extract_frames_test.go`, tag `integration`) agora **roda de verdade** (fixture `tests/fixtures/sample.mp4` gerada, ffmpeg instalado localmente via brew) e passa.
+- Contrato de eventos conferido campo-a-campo nos 4 saltos — nomes de evento e campos JSON batem exatamente entre produtor e consumidor (conferido via grep direto no código).
+- `amqp.go` é byte-a-byte idêntico nos 4 repos.
+- Helm charts das 4 repos: `helm lint` passa limpo em todos.
+
+### Bugs reais encontrados e corrigidos (sessão 2026-09-25, revisão estática)
+1. `go.mod` resolvido para Go 1.25/1.26 mas `Dockerfile` apontava `golang:1.23-*` — corrigido para `golang:1.26-*` nos 4 repos.
+2. `docker-compose.yml` com build context do notification-service faltando `-video-` no nome do diretório — corrigido.
+
+### Bugs reais encontrados e corrigidos (sessão 2026-09-26, execução real)
+3. **`minio/minio` e `minio/mc` não pull mais** (MinIO foi source-only a partir de 2025-10-15 e puxou suas imagens do Docker Hub/quay.io) — trocado para `bitnamilegacy/minio` / `bitnamilegacy/minio-client` em `fiapx-saga-orchestrator/deploy/local/docker-compose.yml`, healthcheck do minio trocado de `mc ready local` para `curl -f http://localhost:9000/minio/health/live` (a imagem bitnami não pré-configura o alias `local` do `mc` que a imagem oficial tinha).
+4. **Build paralelo dos 12 binários Go via `docker compose build` estourava a memória da VM do Docker Desktop** (só 3.8GB alocados) — `go build` do pgx morria com `signal: killed` (OOM). Contorno: `COMPOSE_PARALLEL_LIMIT=1 docker compose build` (sequencial). Considerar aumentar a memória do Docker Desktop nas configurações se isso incomodar.
+5. **Upload de vídeo retornava 500 sempre**, causa raiz em `fiapx-video-upload-service/go.mod`: `aws-sdk-go-v2/service/internal/checksum` e `.../s3shared` estavam fixados em versões mais novas (v1.11.5/v1.20.4) do que as que `service/s3 v1.75.0` e `feature/s3/manager v1.17.0` foram de fato construídos contra (v1.5.3/v1.18.10) — o mismatch quebrava a montagem do middleware stack do `PutObject` com erro `not found: S3100Continue`, falhando 100% client-side antes de qualquer I/O de rede (por isso não relacionado ao MinIO/bitnami, que foi descartado como causa via reprodução isolada). Corrigido com `go get .../checksum@v1.5.3 .../s3shared@v1.18.10` + `go mod tidy`. Também foi adicionado um `slog.Error` no handler de upload (estava engolindo o erro real, por isso o bug ficou invisível nos logs).
+6. **URL de download presigned vinha com o hostname interno `minio:9000`** (o nome do serviço no docker-compose), que não resolve do host e não pode ser trocado por `localhost:9000` depois porque a assinatura SigV4 é calculada sobre o header `Host`. Corrigido criando um segundo cliente S3 (`presignClient`) usado só para `PresignGetObject`, apontado para um novo endpoint configurável via `MINIO_PUBLIC_ENDPOINT` (default = `MINIO_ENDPOINT`, então nada quebra onde não precisa do split); setado para `localhost:9000` no compose. Ver `internal/infrastructure/storage/s3_client.go` e `internal/infrastructure/config/config.go`.
+7. **`docs/runbook.md` documentava a rota errada da saga** (`/sagas/<video_id>` em vez de `/api/v1/sagas/<video_id>`) — corrigido.
+
+Todos os 5 repos com working tree **sujo** neste momento (mudanças acima ainda não commitadas — ver "Para retomar", passo 0).
 
 ## O que NÃO está feito ainda
 
-1. **Execução end-to-end real via Docker.** O Docker Desktop não estava rodando nesta máquina — tudo acima foi verificado a nível de código/build, **nunca rodei `docker compose up` de verdade**. Próximo passo natural: abrir o Docker Desktop, `cd fiapx-saga-orchestrator/deploy/local && docker compose up --build`, seguir `project-5-hacka/docs/runbook.md` (registro → login → upload → poll status → download → conferir e-mail no Mailhog em http://localhost:8025), e corrigir o que quebrar (é bem provável que algo quebre na primeira tentativa — é a primeira vez que os 4 serviços conversam de verdade via RabbitMQ real).
-2. **CI workflows completos** (`.github/workflows/ci.yml` por repositório) — ainda não criados em nenhum dos 4 repos. Template de referência já lido e pronto para reaproveitar: `/Users/franz/development/pos/pos-os-service/.github/workflows/ci.yml` (jobs: `lint` golangci-lint+govet+gofmt, `test` com cobertura, `build` docker para cada `TARGET`, `sonar` — SonarQube efêmero via container na própria action, sem precisar de conta/token externo). Ajustar `go-version` para `1.26` (ou o que cada `go.mod` pedir) e a lista de `TARGET`s por serviço (notification-service só tem `server`+`worker`, sem dispatcher).
-3. **Testes de integração reais (testcontainers-go)** — hoje são placeholders/`t.Skip` nos 4 repos:
+1. **CI workflows completos** (`.github/workflows/ci.yml` por repositório) — ainda não criados em nenhum dos 4 repos. Template de referência já lido e pronto para reaproveitar: `/Users/franz/development/pos/pos-os-service/.github/workflows/ci.yml` (jobs: `lint` golangci-lint+govet+gofmt, `test` com cobertura, `build` docker para cada `TARGET`, `sonar` — SonarQube efêmero via container na própria action). Ajustar `go-version` para `1.26` e a lista de `TARGET`s por serviço.
+2. **Testes de integração reais (testcontainers-go)** — ainda placeholders/`t.Skip` em 3 dos 4 repos (só o ffmpeg do processing-service roda de verdade agora):
    - `fiapx-video-upload-service/tests/integration/stub_test.go`
-   - `fiapx-video-processing-service/tests/integration/extract_frames_test.go` (já tem a estrutura pronta, só falta o fixture de vídeo real — ver item 4)
    - `fiapx-video-notification-service/tests/integration/placeholder_test.go`
    - `fiapx-saga-orchestrator/tests/integration/saga_flow_test.go`
-   Referência de como os repos irmãos fazem isso: `pos-os-service/tests/integration/*.go` (Postgres/RabbitMQ via testcontainers-go, atrás de `//go:build integration`).
-4. **Fixture de vídeo real para o teste de ffmpeg** — `ffmpeg` **não está instalado localmente** nesta máquina (`which ffmpeg` não encontrou nada), então não deu pra gerar o `sample.mp4` sintético agora. Opções para amanhã: `brew install ffmpeg` e gerar com `ffmpeg -f lavfi -i testsrc=duration=3:size=64x64:rate=10 tests/fixtures/sample.mp4`, ou gerar dentro de um container Docker (a imagem final do processing-service já tem ffmpeg via alpine).
-5. **Teste de carga (load-spike smoke test)** — script disparando N uploads concorrentes contra a stack rodando, para demonstrar "não perde requisição sob pico". Ainda não escrito. Provavelmente um script simples em `fiapx-saga-orchestrator/scripts/` ou dentro do runbook.
-6. **Nada foi pushado para o GitHub** — todos os 5 repos são só locais (`git init` + commits), sem remote configurado. Isso é entrega explícita do hackathon ("projeto deve ser versionado no Github"), então em algum momento precisa criar os repos no GitHub e dar push (ação que requer confirmação explícita antes de fazer, por ser uma ação visível/pública).
-7. **Vídeo de apresentação (≤10min)** — roteiro já escrito em `docs/runbook.md`, mas o vídeo em si obviamente não foi gravado.
+   Referência: `pos-os-service/tests/integration/*.go` (Postgres/RabbitMQ via testcontainers-go, atrás de `//go:build integration`).
+3. **Teste de carga (load-spike smoke test)** — script disparando N uploads concorrentes contra a stack rodando. Ainda não escrito.
+4. **Nada foi pushado para o GitHub** — todos os 5 repos são só locais, sem remote configurado. Entrega explícita do hackathon; requer confirmação explícita do usuário antes de criar repos/push (ação pública).
+5. **Vídeo de apresentação (≤10min)** — roteiro em `docs/runbook.md`, vídeo em si não gravado.
 
-## Para retomar amanhã, nesta ordem sugerida
+## Para retomar, nesta ordem sugerida
 
-1. Rodar o golden path de verdade (item 1 acima) — é o que vai revelar se algo no contrato de eventos ou na config do compose ainda está errado apesar da revisão estática.
-2. CI workflows (item 2) — mecânico, rápido, baixo risco.
-3. Testcontainers (item 3) + fixture ffmpeg (item 4) — mais trabalhoso.
-4. Load-spike test (item 5).
-5. Decidir sobre GitHub push (item 6) — perguntar ao usuário antes.
-6. Gravar o vídeo (item 7).
+0. **Commitar as correções da sessão 2026-09-26** nos 4 repos afetados (`fiapx-video-upload-service`, `fiapx-video-processing-service` — só o fixture novo —, `fiapx-saga-orchestrator`, `project-5-hacka`) antes de continuar — ver lista de bugs 3-7 acima. Perguntar ao usuário se quer revisar antes ou já commitar.
+1. CI workflows (item 1) — mecânico, rápido, baixo risco.
+2. Testcontainers restantes (item 2).
+3. Load-spike test (item 3).
+4. Decidir sobre GitHub push (item 4) — perguntar ao usuário antes.
+5. Gravar o vídeo (item 5) — agora que o golden path E o caminho de falha estão comprovadamente funcionando ao vivo, dá pra gravar seguindo o roteiro de `docs/runbook.md` sem medo de travar no meio.
+
+## Notas úteis para retomar a stack
+
+- Docker Desktop precisa estar aberto (`open -a Docker`).
+- Buildar sequencial para não estourar memória: `cd fiapx-saga-orchestrator/deploy/local && COMPOSE_PARALLEL_LIMIT=1 docker compose build`.
+- Subir: `docker compose up -d`.
+- UIs: RabbitMQ http://localhost:15672 (guest/guest), MinIO console http://localhost:9001 (minioadmin/minioadmin), Mailhog http://localhost:8025.
+- Rota da saga é `GET localhost:8084/api/v1/sagas/<video_id>` (já corrigido no runbook).
