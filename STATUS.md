@@ -54,23 +54,29 @@ Todos os 5 repos commitados e com working tree limpo neste momento (exceto um ar
 - **Bug real encontrado**: `.golangci.yml` nos 4 repos estava no formato v1, mas `golangci-lint-action@v6` instala a versão `latest` (v2), que recusa carregar config v1 — o job `lint` teria quebrado 100% das vezes. Corrigido com `golangci-lint migrate` (ferramenta oficial) nos 4 repos.
 - A migração revelou achados reais de lint que também teriam quebrado o CI: 2 falsos-positivos do `gosec` (G101 "hardcoded credential" numa constante de issuer JWT e num teste comparando a URL default `guest:guest@localhost` do RabbitMQ — não são segredos reais), permissões de arquivo de teste (`0o644`→`0o600`), e 2 avisos de depreciação do `staticcheck` em `processing-service` (`manager.NewUploader`/`Upload` do aws-sdk-go-v2 v1.23.10 agora deprecados a favor de `feature/s3/transfermanager` — migração maior, fora de escopo aqui, suprimida com `//nolint:staticcheck` e justificativa). Todos suprimidos com `//nolint` pontual e comentário do porquê, não com exclusão ampla de regra.
 
+### Testcontainers reais (sessão 2026-09-26, depois da CI)
+
+Testes de integração reais com `testcontainers-go` (v0.34.0, mesma versão do `pos-os-service`) escritos e verificados (rodando de verdade, não só compilando) nos 3 repos que ainda tinham placeholders — o ffmpeg do processing-service já tinha sido feito antes:
+
+- `fiapx-video-upload-service/tests/integration/` — Postgres + RabbitMQ + MinIO (`bitnamilegacy/minio`, mesma imagem do compose). Cobre UserRepository, VideoRepository (upsert de status, outbox, paginação/filtro), OutboxRepository, ProcessedEventRepository, `messaging.Conn` (publish/consume/retry/DLQ), e `S3Client` contra MinIO real — inclusive baixando de verdade via HTTP a partir da URL presigned, o que exercita o fix de `MINIO_PUBLIC_ENDPOINT` desta mesma sessão. 21 testes, ~26s.
+- `fiapx-video-notification-service/tests/integration/` — Postgres + RabbitMQ + Mailhog. Cobre NotificationRepository, ProcessedEventRepository, `messaging.Conn`, e um round-trip real de SMTP via `email.Sender` contra o Mailhog, checando a entrega pela API HTTP dele (destinatário, assunto, corpo) em vez de só "sem erro". 12 testes, ~17-20s.
+- `fiapx-saga-orchestrator/tests/integration/` — Postgres + RabbitMQ. Cobre SagaRepository/OutboxRepository/ProcessedEventRepository, `messaging.Conn`, e principalmente um teste de fluxo completo que liga um `messaging.Conn` real ao `HandleEvent` real (igual ao `cmd/worker/main.go`) e verifica de ponta a ponta: publicar `video.uploaded` → saga real vai pra `PROCESSING` no Postgres → outbox real com `video.process.requested` → reentrega duplicada é no-op (idempotência) → `video.processing.completed`/`.failed` levam ao estado terminal certo com os 2 eventos de outbox esperados (`video.status.*` + `video.notify.requested`). 12 testes, ~13-15s.
+
+`go test ./...` (sem tags) continua rápido e sem dependências externas nos 4 repos — os testes de integração ficam atrás de `//go:build integration` e só rodam com `go test -tags=integration ./...`.
+
+Todos os 4 repos com working tree limpo depois desses commits.
+
 ## O que NÃO está feito ainda
 
-1. **Testes de integração reais (testcontainers-go)** — ainda placeholders/`t.Skip` em 3 dos 4 repos (só o ffmpeg do processing-service roda de verdade agora):
-   - `fiapx-video-upload-service/tests/integration/stub_test.go`
-   - `fiapx-video-notification-service/tests/integration/placeholder_test.go`
-   - `fiapx-saga-orchestrator/tests/integration/saga_flow_test.go`
-   Referência: `pos-os-service/tests/integration/*.go` (Postgres/RabbitMQ via testcontainers-go, atrás de `//go:build integration`).
-2. **Teste de carga (load-spike smoke test)** — script disparando N uploads concorrentes contra a stack rodando. Ainda não escrito.
-3. **Nada foi pushado para o GitHub** — todos os 5 repos são só locais, sem remote configurado. Entrega explícita do hackathon; requer confirmação explícita do usuário antes de criar repos/push (ação pública). **Nota**: os workflows de CI só vão rodar de verdade depois desse push (GitHub Actions não roda em repos locais).
-4. **Vídeo de apresentação (≤10min)** — roteiro em `docs/runbook.md`, vídeo em si não gravado.
+1. **Teste de carga (load-spike smoke test)** — script disparando N uploads concorrentes contra a stack rodando. Ainda não escrito.
+2. **Nada foi pushado para o GitHub** — todos os 5 repos são só locais, sem remote configurado. Entrega explícita do hackathon; requer confirmação explícita do usuário antes de criar repos/push (ação pública). **Nota**: os workflows de CI só vão rodar de verdade depois desse push (GitHub Actions não roda em repos locais), e o job `test` de cada um agora inclui os testes de integração reais acima — vale conferir que rodam certo lá também (containers dentro de `ubuntu-latest` devem funcionar sem configuração extra, já que GitHub-hosted runners têm Docker).
+3. **Vídeo de apresentação (≤10min)** — roteiro em `docs/runbook.md`, vídeo em si não gravado.
 
 ## Para retomar, nesta ordem sugerida
 
-1. Testcontainers restantes (item 1).
-2. Load-spike test (item 2).
-3. Decidir sobre GitHub push (item 3) — perguntar ao usuário antes. Depois do push, conferir se os workflows de CI passam de verdade no GitHub Actions (só foram validados localmente, rodando os mesmos comandos que os jobs executam).
-4. Gravar o vídeo (item 4) — agora que o golden path E o caminho de falha estão comprovadamente funcionando ao vivo, dá pra gravar seguindo o roteiro de `docs/runbook.md` sem medo de travar no meio.
+1. Load-spike test (item 1).
+2. Decidir sobre GitHub push (item 2) — perguntar ao usuário antes. Depois do push, conferir se os workflows de CI passam de verdade no GitHub Actions (só foram validados localmente, rodando os mesmos comandos que os jobs executam, incluindo os testes de integração com testcontainers).
+3. Gravar o vídeo (item 3) — agora que o golden path E o caminho de falha estão comprovadamente funcionando ao vivo, dá pra gravar seguindo o roteiro de `docs/runbook.md` sem medo de travar no meio.
 
 ## Notas úteis para retomar a stack
 
