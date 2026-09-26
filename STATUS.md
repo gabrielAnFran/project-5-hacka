@@ -45,28 +45,32 @@ Todos em `/Users/franz/development/pos/`, como diretórios irmãos:
 6. **URL de download presigned vinha com o hostname interno `minio:9000`** (o nome do serviço no docker-compose), que não resolve do host e não pode ser trocado por `localhost:9000` depois porque a assinatura SigV4 é calculada sobre o header `Host`. Corrigido criando um segundo cliente S3 (`presignClient`) usado só para `PresignGetObject`, apontado para um novo endpoint configurável via `MINIO_PUBLIC_ENDPOINT` (default = `MINIO_ENDPOINT`, então nada quebra onde não precisa do split); setado para `localhost:9000` no compose. Ver `internal/infrastructure/storage/s3_client.go` e `internal/infrastructure/config/config.go`.
 7. **`docs/runbook.md` documentava a rota errada da saga** (`/sagas/<video_id>` em vez de `/api/v1/sagas/<video_id>`) — corrigido.
 
-Todos os 5 repos com working tree **sujo** neste momento (mudanças acima ainda não commitadas — ver "Para retomar", passo 0).
+Todos os 5 repos commitados e com working tree limpo neste momento (exceto um arquivo solto e não relacionado, `project-docs-claude/pos.code-workspace`, deixado como está).
+
+### CI workflows (sessão 2026-09-26, depois do golden path)
+
+`.github/workflows/ci.yml` criado nos 4 repos de serviço, adaptado de `pos-os-service/.github/workflows/ci.yml` (jobs `lint`/`test`/`build`/`sonar`), com `go-version: "1.26"` e a lista de `TARGET`s de cada serviço (notification-service só tem `server`+`worker`, os outros 3 têm `server`+`worker`+`outbox-dispatcher`). Todos os 4 jobs `lint`/`test`/`build` foram exercitados localmente (não só lidos) antes de commitar:
+
+- **Bug real encontrado**: `.golangci.yml` nos 4 repos estava no formato v1, mas `golangci-lint-action@v6` instala a versão `latest` (v2), que recusa carregar config v1 — o job `lint` teria quebrado 100% das vezes. Corrigido com `golangci-lint migrate` (ferramenta oficial) nos 4 repos.
+- A migração revelou achados reais de lint que também teriam quebrado o CI: 2 falsos-positivos do `gosec` (G101 "hardcoded credential" numa constante de issuer JWT e num teste comparando a URL default `guest:guest@localhost` do RabbitMQ — não são segredos reais), permissões de arquivo de teste (`0o644`→`0o600`), e 2 avisos de depreciação do `staticcheck` em `processing-service` (`manager.NewUploader`/`Upload` do aws-sdk-go-v2 v1.23.10 agora deprecados a favor de `feature/s3/transfermanager` — migração maior, fora de escopo aqui, suprimida com `//nolint:staticcheck` e justificativa). Todos suprimidos com `//nolint` pontual e comentário do porquê, não com exclusão ampla de regra.
 
 ## O que NÃO está feito ainda
 
-1. **CI workflows completos** (`.github/workflows/ci.yml` por repositório) — ainda não criados em nenhum dos 4 repos. Template de referência já lido e pronto para reaproveitar: `/Users/franz/development/pos/pos-os-service/.github/workflows/ci.yml` (jobs: `lint` golangci-lint+govet+gofmt, `test` com cobertura, `build` docker para cada `TARGET`, `sonar` — SonarQube efêmero via container na própria action). Ajustar `go-version` para `1.26` e a lista de `TARGET`s por serviço.
-2. **Testes de integração reais (testcontainers-go)** — ainda placeholders/`t.Skip` em 3 dos 4 repos (só o ffmpeg do processing-service roda de verdade agora):
+1. **Testes de integração reais (testcontainers-go)** — ainda placeholders/`t.Skip` em 3 dos 4 repos (só o ffmpeg do processing-service roda de verdade agora):
    - `fiapx-video-upload-service/tests/integration/stub_test.go`
    - `fiapx-video-notification-service/tests/integration/placeholder_test.go`
    - `fiapx-saga-orchestrator/tests/integration/saga_flow_test.go`
    Referência: `pos-os-service/tests/integration/*.go` (Postgres/RabbitMQ via testcontainers-go, atrás de `//go:build integration`).
-3. **Teste de carga (load-spike smoke test)** — script disparando N uploads concorrentes contra a stack rodando. Ainda não escrito.
-4. **Nada foi pushado para o GitHub** — todos os 5 repos são só locais, sem remote configurado. Entrega explícita do hackathon; requer confirmação explícita do usuário antes de criar repos/push (ação pública).
-5. **Vídeo de apresentação (≤10min)** — roteiro em `docs/runbook.md`, vídeo em si não gravado.
+2. **Teste de carga (load-spike smoke test)** — script disparando N uploads concorrentes contra a stack rodando. Ainda não escrito.
+3. **Nada foi pushado para o GitHub** — todos os 5 repos são só locais, sem remote configurado. Entrega explícita do hackathon; requer confirmação explícita do usuário antes de criar repos/push (ação pública). **Nota**: os workflows de CI só vão rodar de verdade depois desse push (GitHub Actions não roda em repos locais).
+4. **Vídeo de apresentação (≤10min)** — roteiro em `docs/runbook.md`, vídeo em si não gravado.
 
 ## Para retomar, nesta ordem sugerida
 
-0. **Commitar as correções da sessão 2026-09-26** nos 4 repos afetados (`fiapx-video-upload-service`, `fiapx-video-processing-service` — só o fixture novo —, `fiapx-saga-orchestrator`, `project-5-hacka`) antes de continuar — ver lista de bugs 3-7 acima. Perguntar ao usuário se quer revisar antes ou já commitar.
-1. CI workflows (item 1) — mecânico, rápido, baixo risco.
-2. Testcontainers restantes (item 2).
-3. Load-spike test (item 3).
-4. Decidir sobre GitHub push (item 4) — perguntar ao usuário antes.
-5. Gravar o vídeo (item 5) — agora que o golden path E o caminho de falha estão comprovadamente funcionando ao vivo, dá pra gravar seguindo o roteiro de `docs/runbook.md` sem medo de travar no meio.
+1. Testcontainers restantes (item 1).
+2. Load-spike test (item 2).
+3. Decidir sobre GitHub push (item 3) — perguntar ao usuário antes. Depois do push, conferir se os workflows de CI passam de verdade no GitHub Actions (só foram validados localmente, rodando os mesmos comandos que os jobs executam).
+4. Gravar o vídeo (item 4) — agora que o golden path E o caminho de falha estão comprovadamente funcionando ao vivo, dá pra gravar seguindo o roteiro de `docs/runbook.md` sem medo de travar no meio.
 
 ## Notas úteis para retomar a stack
 
