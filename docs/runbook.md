@@ -48,6 +48,16 @@ válido (ex: um `.txt` renomeado para `.mp4`) — o `ffmpeg` falhará, o status
 do vídeo ficará `FAILED` com `error_message` preenchido, e um e-mail de
 falha chegará no Mailhog.
 
+Todo esse roteiro (registro → login → upload → status → saga → download →
+caminho de falha → teste de carga) também pode ser executado de uma vez
+com [`scripts/demo.sh`](../../fiapx-saga-orchestrator/scripts/demo.sh) —
+ele explica cada passo, mostra o retorno real de cada chamada, e pausa
+entre passos (`ENTER` para avançar; `--auto` para não pausar):
+
+```bash
+../fiapx-saga-orchestrator/scripts/demo.sh
+```
+
 ## Teste de carga (load-spike smoke test)
 
 ```bash
