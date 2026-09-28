@@ -66,17 +66,21 @@ Testes de integração reais com `testcontainers-go` (v0.34.0, mesma versão do 
 
 Todos os 4 repos com working tree limpo depois desses commits.
 
+### Load-spike smoke test (sessão 2026-09-28)
+
+`fiapx-saga-orchestrator/scripts/load_spike_test.sh` escrito e verificado contra a stack real: dispara N uploads concorrentes (default 30), confere que todos são aceitos (202) e que todos chegam a `COMPLETED` dentro de um timeout. Rodado com N=20, 50 e 100 — todos aceitos e concluídos, 0 mensagens em qualquer DLQ. Documentado em `docs/runbook.md`.
+
+Nota curiosa: a primeira tentativa com N=50 reportou 30 vídeos "travados" — não era um bug do sistema, era o próprio script não passando `?limit=` no polling contra `GET /api/v1/videos`, que tem paginação com página default de 20 (`fiapx-video-upload-service/internal/infrastructure/db/video_repository_gorm.go:195`). Corrigido no script.
+
 ## O que NÃO está feito ainda
 
-1. **Teste de carga (load-spike smoke test)** — script disparando N uploads concorrentes contra a stack rodando. Ainda não escrito.
-2. **Nada foi pushado para o GitHub** — todos os 5 repos são só locais, sem remote configurado. Entrega explícita do hackathon; requer confirmação explícita do usuário antes de criar repos/push (ação pública). **Nota**: os workflows de CI só vão rodar de verdade depois desse push (GitHub Actions não roda em repos locais), e o job `test` de cada um agora inclui os testes de integração reais acima — vale conferir que rodam certo lá também (containers dentro de `ubuntu-latest` devem funcionar sem configuração extra, já que GitHub-hosted runners têm Docker).
-3. **Vídeo de apresentação (≤10min)** — roteiro em `docs/runbook.md`, vídeo em si não gravado.
+1. **Nada foi pushado para o GitHub** — todos os 5 repos são só locais, sem remote configurado. Entrega explícita do hackathon; requer confirmação explícita do usuário antes de criar repos/push (ação pública). **Nota**: os workflows de CI só vão rodar de verdade depois desse push (GitHub Actions não roda em repos locais), e o job `test` de cada um agora inclui os testes de integração reais com testcontainers — vale conferir que rodam certo lá também (containers dentro de `ubuntu-latest` devem funcionar sem configuração extra, já que GitHub-hosted runners têm Docker).
+2. **Vídeo de apresentação (≤10min)** — roteiro em `docs/runbook.md`, vídeo em si não gravado.
 
 ## Para retomar, nesta ordem sugerida
 
-1. Load-spike test (item 1).
-2. Decidir sobre GitHub push (item 2) — perguntar ao usuário antes. Depois do push, conferir se os workflows de CI passam de verdade no GitHub Actions (só foram validados localmente, rodando os mesmos comandos que os jobs executam, incluindo os testes de integração com testcontainers).
-3. Gravar o vídeo (item 3) — agora que o golden path E o caminho de falha estão comprovadamente funcionando ao vivo, dá pra gravar seguindo o roteiro de `docs/runbook.md` sem medo de travar no meio.
+1. Decidir sobre GitHub push (item 1) — perguntar ao usuário antes. Depois do push, conferir se os workflows de CI passam de verdade no GitHub Actions (só foram validados localmente, rodando os mesmos comandos que os jobs executam, incluindo os testes de integração com testcontainers).
+2. Gravar o vídeo (item 2) — agora que o golden path, o caminho de falha, E o teste de carga estão comprovadamente funcionando ao vivo, dá pra gravar seguindo o roteiro de `docs/runbook.md` sem medo de travar no meio. Único item restante do checklist do hackathon além do push pro GitHub.
 
 ## Notas úteis para retomar a stack
 
