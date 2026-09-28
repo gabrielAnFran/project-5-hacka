@@ -7,6 +7,9 @@ Go independentes (cada um em seu próprio repositório, com seu próprio banco
 de dados), coordenados por um orquestrador de saga e comunicando-se
 exclusivamente via eventos em um exchange RabbitMQ (`video.events`).
 
+Diagrama editável (importar em [draw.io](https://app.diagrams.net) via
+File → Open ou arrastando o arquivo): [`architecture-diagram.html`](architecture-diagram.html).
+
 ```
                          ┌────────────────────┐
    usuário  ──HTTP──────▶│  video-upload-      │
