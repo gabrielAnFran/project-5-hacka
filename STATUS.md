@@ -82,6 +82,10 @@ Nota curiosa: a primeira tentativa com N=50 reportou 30 vídeos "travados" — n
 - Depois dessas 2 correções, **os 4 workflows de CI passam de verdade no GitHub Actions** (lint + test + build + sonar, incluindo os testes de integração reais com testcontainers) — confirmado via `gh run list`, não só assumido.
 - **Diagrama de arquitetura importável no draw.io**: `project-5-hacka/docs/architecture-diagram.html` (formato de embed HTML do draw.io — abre num navegador ou importa em app.diagrams.net). Mostra os 4 serviços, saga-orchestrator, os 4 Postgres, MinIO e Mailhog, com cada seta rotulada pelo nome real do evento/comando. Linkado em `architecture.md`.
 
+### Script de demonstração (sessão 2026-09-28)
+
+`fiapx-saga-orchestrator/scripts/demo.sh` — roda o roteiro completo (registro → login → upload → status → saga → download → caminho de falha → teste de carga) de uma vez só, explicando cada passo e mostrando o retorno real de cada chamada, pausando entre passos (`--auto` pula as pausas). Pensado para gravar a apresentação sem digitar comando por comando. Verificado de ponta a ponta com `--auto` contra a stack real — os 12 passos passam, incluindo o erro real do ffmpeg no caminho de falha e uma rajada de 10 uploads no teste de carga. Documentado em `docs/runbook.md`.
+
 ## O que NÃO está feito ainda
 
 1. **Vídeo de apresentação (≤10min)** — roteiro sugerido em `docs/runbook.md`, vídeo em si não gravado. **Único item restante do checklist do hackathon.**
