@@ -1,6 +1,6 @@
 # Status — FIAP X Video Processing (retomar aqui)
 
-Última atualização: 2026-09-26.
+Última atualização: 2026-09-28.
 
 ## O que é isto
 
@@ -13,15 +13,16 @@ idempotentes, Helm, testcontainers — com MinIO para storage de vídeo/zip e
 JWT embutido no upload-service (sem serviço de auth separado). Detalhes
 completos e o porquê de cada decisão: `docs/architecture.md` + `docs/adr/`.
 
-## Repositórios (todos criados, com git init + commits, NADA pushado ainda)
+## Repositórios (todos no GitHub, públicos, sob a conta gabrielAnFran)
 
-Todos em `/Users/franz/development/pos/`, como diretórios irmãos:
+Todos em `/Users/franz/development/pos/` localmente, como diretórios irmãos,
+com remote `origin` apontando para o GitHub:
 
-- `fiapx-video-upload-service` — auth JWT (bcrypt real, não mockado), upload → MinIO, listagem de status, URL de download presigned.
-- `fiapx-video-processing-service` — worker ffmpeg (extração de frames + zip), MinIO.
-- `fiapx-video-notification-service` — worker SMTP (Mailhog local), sem outbox (consumidor terminal).
-- `fiapx-saga-orchestrator` — máquina de estados `UPLOADED→PROCESSING→COMPLETED|FAILED`, dono do `deploy/local/docker-compose.yml` compartilhado (19 serviços).
-- `project-5-hacka` (este repo) — documentação: `docs/architecture.md`, `docs/adr/000{1,2,3,4}-*.md`, `docs/db-schema.md`, `docs/runbook.md`.
+- [`fiapx-video-upload-service`](https://github.com/gabrielAnFran/fiapx-video-upload-service) — auth JWT (bcrypt real, não mockado), upload → MinIO, listagem de status, URL de download presigned.
+- [`fiapx-video-processing-service`](https://github.com/gabrielAnFran/fiapx-video-processing-service) — worker ffmpeg (extração de frames + zip), MinIO.
+- [`fiapx-video-notification-service`](https://github.com/gabrielAnFran/fiapx-video-notification-service) — worker SMTP (Mailhog local), sem outbox (consumidor terminal).
+- [`fiapx-saga-orchestrator`](https://github.com/gabrielAnFran/fiapx-saga-orchestrator) — máquina de estados `UPLOADED→PROCESSING→COMPLETED|FAILED`, dono do `deploy/local/docker-compose.yml` compartilhado (19 serviços) e do `scripts/load_spike_test.sh`.
+- [`project-5-hacka`](https://github.com/gabrielAnFran/project-5-hacka) (este repo) — documentação: `docs/architecture.md`, `docs/architecture-diagram.html` (draw.io), `docs/adr/000{1,2,3,4}-*.md`, `docs/db-schema.md`, `docs/runbook.md`.
 - `../fiapx-hackathon.code-workspace` — workspace raiz linkando os 5 acima.
 
 ## O que já está PRONTO e verificado
@@ -72,15 +73,22 @@ Todos os 4 repos com working tree limpo depois desses commits.
 
 Nota curiosa: a primeira tentativa com N=50 reportou 30 vídeos "travados" — não era um bug do sistema, era o próprio script não passando `?limit=` no polling contra `GET /api/v1/videos`, que tem paginação com página default de 20 (`fiapx-video-upload-service/internal/infrastructure/db/video_repository_gorm.go:195`). Corrigido no script.
 
+### GitHub push + diagrama (sessão 2026-09-28)
+
+- **Todos os 5 repos pushados para o GitHub** (públicos, conta `gabrielAnFran`, com descrição em cada um). CI (`GitHub Actions`) disparou automaticamente em cada push.
+- **2 bugs reais de CI só visíveis no GitHub Actions** (invisíveis localmente, porque o ambiente local tinha ferramentas mais novas que o que as actions instalam por padrão):
+  8. `golangci-lint-action@v6` com `version: latest` instala **v1.64.8** (compilado com go1.24) — não v2 como o `golangci-lint` instalado localmente via brew (v2.12.2) — e recusa lintar um módulo com `go 1.26.0`/`1.25.11` no `go.mod` ("the Go language version (go1.24) used to build golangci-lint is lower than the targeted Go version"). Corrigido: mudou de `version: latest` para `version: v2.12.2`, mas **v6 da action recusa qualquer versão v2.x explicitamente** ("golangci-lint v2 is not supported by golangci-lint-action v6, you must update to golangci-lint-action v7"). Solução final: `golangci-lint-action@v9` (última major, confirmada via API de releases) + `version: v2.12.2`. Corrigido nos 4 repos.
+  9. `fiapx-video-processing-service`: o teste real de ffmpeg (`extract_frames_test.go`) falhou no runner do GitHub com `exec: "ffmpeg": executable file not found in $PATH` — `ubuntu-latest` não vem com ffmpeg pré-instalado (diferente desta máquina, onde foi instalado via brew). Corrigido com um passo `apt-get install -y ffmpeg` antes do `go test` no job `test`.
+- Depois dessas 2 correções, **os 4 workflows de CI passam de verdade no GitHub Actions** (lint + test + build + sonar, incluindo os testes de integração reais com testcontainers) — confirmado via `gh run list`, não só assumido.
+- **Diagrama de arquitetura importável no draw.io**: `project-5-hacka/docs/architecture-diagram.html` (formato de embed HTML do draw.io — abre num navegador ou importa em app.diagrams.net). Mostra os 4 serviços, saga-orchestrator, os 4 Postgres, MinIO e Mailhog, com cada seta rotulada pelo nome real do evento/comando. Linkado em `architecture.md`.
+
 ## O que NÃO está feito ainda
 
-1. **Nada foi pushado para o GitHub** — todos os 5 repos são só locais, sem remote configurado. Entrega explícita do hackathon; requer confirmação explícita do usuário antes de criar repos/push (ação pública). **Nota**: os workflows de CI só vão rodar de verdade depois desse push (GitHub Actions não roda em repos locais), e o job `test` de cada um agora inclui os testes de integração reais com testcontainers — vale conferir que rodam certo lá também (containers dentro de `ubuntu-latest` devem funcionar sem configuração extra, já que GitHub-hosted runners têm Docker).
-2. **Vídeo de apresentação (≤10min)** — roteiro em `docs/runbook.md`, vídeo em si não gravado.
+1. **Vídeo de apresentação (≤10min)** — roteiro sugerido em `docs/runbook.md`, vídeo em si não gravado. **Único item restante do checklist do hackathon.**
 
 ## Para retomar, nesta ordem sugerida
 
-1. Decidir sobre GitHub push (item 1) — perguntar ao usuário antes. Depois do push, conferir se os workflows de CI passam de verdade no GitHub Actions (só foram validados localmente, rodando os mesmos comandos que os jobs executam, incluindo os testes de integração com testcontainers).
-2. Gravar o vídeo (item 2) — agora que o golden path, o caminho de falha, E o teste de carga estão comprovadamente funcionando ao vivo, dá pra gravar seguindo o roteiro de `docs/runbook.md` sem medo de travar no meio. Único item restante do checklist do hackathon além do push pro GitHub.
+1. Gravar o vídeo seguindo o roteiro de `docs/runbook.md` — todo o resto (golden path, caminho de falha, load-spike, testes, CI) já está comprovadamente funcionando ao vivo.
 
 ## Notas úteis para retomar a stack
 

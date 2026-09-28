@@ -64,10 +64,7 @@ vídeo por vez. Verificado localmente com 20, 50 e 100 uploads
 simultâneos — todos aceitos e concluídos, 0 mensagens nas DLQs em
 qualquer execução.
 
-## Roteiro do vídeo de apresentação (≤10min)
-
-Roteiro completo, com fala sugerida em português e direções de tela, em
-[`video_script.md`](video_script.md). Resumo:
+## Roteiro sugerido para o vídeo de apresentação (≤10min)
 
 1. (~2min) Documentação: `docs/architecture.md`, diagrama draw.io
    ([`architecture-diagram.html`](architecture-diagram.html)), contrato de
@@ -75,7 +72,7 @@ Roteiro completo, com fala sugerida em português e direções de tela, em
 2. (~2min) Arquitetura escolhida: orquestrador de saga mesmo sem
    compensação ([ADR 0001](adr/0001-orchestrated-saga.md)), outbox +
    idempotência para garantir zero perda de requisição sob pico.
-3. (~4:30) Projeto funcionando: golden path ao vivo, caminho de falha, e o
-   teste de carga (`scripts/load_spike_test.sh`) provando que um pico de
-   uploads concorrentes não perde nenhuma requisição.
+3. (~4:30) Projeto funcionando: golden path ao vivo, caminho de falha, e um
+   teste de carga demonstrando que um pico de uploads concorrentes não
+   perde nenhuma requisição.
 4. (~1min) Testes com testcontainers reais e CI/CD nos 5 repositórios.
