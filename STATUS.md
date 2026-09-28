@@ -86,13 +86,35 @@ Nota curiosa: a primeira tentativa com N=50 reportou 30 vídeos "travados" — n
 
 `fiapx-saga-orchestrator/scripts/demo.sh` — roda o roteiro completo (registro → login → upload → status → saga → download → caminho de falha → teste de carga) de uma vez só, explicando cada passo e mostrando o retorno real de cada chamada, pausando entre passos (`--auto` pula as pausas). Pensado para gravar a apresentação sem digitar comando por comando. Verificado de ponta a ponta com `--auto` contra a stack real — os 12 passos passam, incluindo o erro real do ffmpeg no caminho de falha e uma rajada de 10 uploads no teste de carga. Documentado em `docs/runbook.md`.
 
+### Cobertura de testes ≥80% em todos os repos (sessão 2026-09-28)
+
+Usuário pediu >80% de cobertura em todos os 4 repos de serviço. Medição padronizada: `go test -tags=integration ./... -coverpkg=$PKGS -coverprofile=coverage.out` com `$PKGS` = `go list ./...` **excluindo pacotes `/cmd/`** (código de wiring do `main()`, não testável de forma significativa — mesma convenção usada pelos repos irmãos `pos-*`). Antes disso, o CI computava com `-coverpkg=./...` (incluindo `cmd/`), o que inflava artificialmente o denominador e escondia lacunas reais.
+
+Resultado final, todos ≥80%:
+
+| Repo | Antes | Depois |
+|---|---|---|
+| `fiapx-saga-orchestrator` | 82.9% | 82.9% (já estava acima, nenhuma mudança de teste necessária) |
+| `fiapx-video-notification-service` | 72.9% | **80.6%** |
+| `fiapx-video-upload-service` | 62.1% | **84.7%** |
+| `fiapx-video-processing-service` | 43.0% | **82.2%** |
+
+O que foi feito em cada um:
+- **notification-service**: só faltava `health_handler.go` (0%) e algumas ramificações de erro em `amqp.go`/`smtp_sender.go`/`IsProcessed` — testes unitários simples (sem infra real: DSN/porta inválida falha rápido e determinístico) + 1 teste de integração reaproveitando o Postgres já existente na suíte de testcontainers.
+- **upload-service**: faltava a camada de apresentação inteira (`auth_handler.go`, `video_handler.go`, middlewares) e `ListVideosUseCase` (zero testes em qualquer lugar) — testes `httptest` com fakes em memória ligados aos usecases reais, sem alterar código de produção. `Readyz` usa um `*gorm.DB` real em SQLite in-memory para testar os dois branches do ping sem precisar de Postgres.
+- **processing-service** (o maior gap): **nunca tinha recebido testcontainers** — só o teste real de ffmpeg existia. Adicionada a suíte completa (Postgres/RabbitMQ/MinIO) espelhando os outros 3 repos, mais um teste do wrapper `ffmpeg.Adapter` e um teste unitário simples do health handler.
+
+CI atualizado nos 4 repos (`.github/workflows/ci.yml`): `-coverpkg` agora exclui `cmd/`, e um novo passo `enforce coverage threshold` falha o build se a cobertura cair abaixo de 80% — trava o número para não regredir silenciosamente.
+
+Todos os 4 repos com working tree limpo, `gofmt`/`go vet`/`golangci-lint`/`go test` (com e sem `-tags=integration`) verificados localmente antes de cada commit, e cada push também confirmado verde no GitHub Actions via `gh run list`.
+
 ## O que NÃO está feito ainda
 
 1. **Vídeo de apresentação (≤10min)** — roteiro sugerido em `docs/runbook.md`, vídeo em si não gravado. **Único item restante do checklist do hackathon.**
 
 ## Para retomar, nesta ordem sugerida
 
-1. Gravar o vídeo seguindo o roteiro de `docs/runbook.md` — todo o resto (golden path, caminho de falha, load-spike, testes, CI) já está comprovadamente funcionando ao vivo.
+1. Gravar o vídeo seguindo o roteiro de `docs/runbook.md` — todo o resto (golden path, caminho de falha, load-spike, testes com cobertura ≥80%, CI) já está comprovadamente funcionando ao vivo.
 
 ## Notas úteis para retomar a stack
 
