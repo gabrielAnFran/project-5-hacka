@@ -48,6 +48,22 @@ válido (ex: um `.txt` renomeado para `.mp4`) — o `ffmpeg` falhará, o status
 do vídeo ficará `FAILED` com `error_message` preenchido, e um e-mail de
 falha chegará no Mailhog.
 
+## Teste de carga (load-spike smoke test)
+
+```bash
+../fiapx-saga-orchestrator/scripts/load_spike_test.sh [N] [UPLOAD_BASE_URL]
+```
+
+Registra um usuário novo, dispara `N` uploads concorrentes (default 30)
+contra o `upload-service`, e espera até todos chegarem a um estado
+terminal. Falha se qualquer requisição não for aceita (202) ou se algum
+vídeo não chegar a `COMPLETED` dentro do timeout — demonstrando que o
+sistema absorve o pico via outbox + fila em vez de perder ou rejeitar
+requisições, mesmo o worker do processing-service consumindo a fila um
+vídeo por vez. Verificado localmente com 20, 50 e 100 uploads
+simultâneos — todos aceitos e concluídos, 0 mensagens nas DLQs em
+qualquer execução.
+
 ## Roteiro sugerido para o vídeo de apresentação (≤10min)
 
 1. (~2min) Documentação: mostrar `docs/architecture.md`, o diagrama de
