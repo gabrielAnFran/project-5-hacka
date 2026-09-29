@@ -1,6 +1,6 @@
 # Status — FIAP X Video Processing (retomar aqui)
 
-Última atualização: 2026-09-28.
+Última atualização: 2026-09-29.
 
 ## O que é isto
 
@@ -108,13 +108,21 @@ CI atualizado nos 4 repos (`.github/workflows/ci.yml`): `-coverpkg` agora exclui
 
 Todos os 4 repos com working tree limpo, `gofmt`/`go vet`/`golangci-lint`/`go test` (com e sem `-tags=integration`) verificados localmente antes de cada commit, e cada push também confirmado verde no GitHub Actions via `gh run list`.
 
+### Vídeo de apresentação (sessão 2026-09-29)
+
+Gravado e publicado no Google Drive. Link registrado em
+[`ENTREGAVEL.md`](ENTREGAVEL.md#1-vídeo-de-demonstração).
+
 ## O que NÃO está feito ainda
 
-1. **Vídeo de apresentação (≤10min)** — roteiro sugerido em `docs/runbook.md`, vídeo em si não gravado. **Único item restante do checklist do hackathon.**
+Nada — checklist do hackathon completo (documentação, 5 repositórios públicos com CI
+verde e cobertura ≥80%, golden path/caminho de falha/load-spike verificados ao vivo, e
+vídeo de apresentação gravado e linkado).
 
 ## Para retomar, nesta ordem sugerida
 
-1. Gravar o vídeo seguindo o roteiro de `docs/runbook.md` — todo o resto (golden path, caminho de falha, load-spike, testes com cobertura ≥80%, CI) já está comprovadamente funcionando ao vivo.
+Nenhum item pendente. Se retomar, conferir se o link do vídeo no Drive ainda está com
+permissão de visualização correta para quem for avaliar a entrega.
 
 ## Notas úteis para retomar a stack
 

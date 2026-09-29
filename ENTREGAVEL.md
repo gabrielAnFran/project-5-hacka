@@ -1,7 +1,7 @@
 # Hackathon FIAP X — Documento de Entrega
 
 **PÓS TECH — Arquitetura de Software**
-**Data de Entrega:** 28/09/2026
+**Data de Entrega:** 29/09/2026
 **Versão:** 1
 
 ---
@@ -18,7 +18,7 @@
 
 ## 1. Vídeo de Demonstração
 
-**Link:** *(a preencher após gravação e publicação — não listado no YouTube ou Google Drive)*
+**Link:** <https://drive.google.com/file/d/1TjqH0rwqwOp3uPZniKSsamxJZ7FZxIsp/view?usp=sharing>
 
 **O vídeo demonstra:**
 
@@ -29,8 +29,7 @@
   processamento assíncrono → download), caminho de falha (upload inválido → `FAILED` com
   motivo real do erro → notificação), e um teste de carga com uploads concorrentes provando
   que o sistema não perde requisição sob pico.
-- Roteiro de apoio: [`docs/runbook.md`](docs/runbook.md). Toda a demonstração ao vivo é
-  automatizada por
+- Toda a demonstração ao vivo é automatizada por
   [`fiapx-saga-orchestrator/scripts/demo.sh`](https://github.com/gabrielAnFran/fiapx-saga-orchestrator/blob/main/scripts/demo.sh),
   que registra usuário, faz upload, acompanha o status, consulta a saga, baixa o resultado,
   repete o fluxo com um arquivo inválido, e dispara o teste de carga — explicando cada passo e
@@ -43,7 +42,7 @@
 ### Repo 1 — Documentação e Arquitetura
 **URL:** https://github.com/gabrielAnFran/project-5-hacka
 **Descrição:** Repositório sem código de serviço — documentação da arquitetura, ADRs, esquema
-de banco de dados, roteiro de demonstração, diagrama editável (draw.io) e este documento de
+de banco de dados, runbook de execução local, diagrama editável (draw.io) e este documento de
 entrega.
 
 ### Repo 2 — Video Upload Service
@@ -62,8 +61,8 @@ CI/CD:
   de wiring de `main()`, sem lógica própria) — cobertura real de **84,7%** (seção 3.1), build
   Docker multi-stage (distroless, non-root) para os 3 binários (`server`, `worker`,
   `outbox-dispatcher`), e um job **SonarQube** (instância efêmera self-hosted na própria
-  pipeline, quality gate real via API — informativo; Community Edition não analisa Go como
-  linguagem paga, então o golangci-lint é o gate real e bloqueante).
+  pipeline, quality gate real via API — informativo, não bloqueante; o gate bloqueante é o
+  golangci-lint).
 
 ### Repo 3 — Video Processing Service
 **URL:** https://github.com/gabrielAnFran/fiapx-video-processing-service
@@ -186,7 +185,7 @@ rotulada pelo nome real do evento/comando) disponível em duas formas:
                             │ comandos: video.status.completed|failed     │ comando:
                             │                                              │ video.process.requested
                             │                                              ▼
-                     saga-orchestrator ◄──fatos: processing.completed|failed── video-processing-service
+                     saga-orchestrator ◄──fatos: video.processing.completed|failed── video-processing-service
                             │
                             └─comando: video.notify.requested──► video-notification-service
 ```
@@ -247,11 +246,11 @@ serviço, CI/CD isolado por repositório.
 
 **Golden path:**
 ```
-POST /auth/register, /auth/login → POST /videos (202, streaming pro MinIO)
+POST /api/v1/auth/register, /api/v1/auth/login → POST /api/v1/videos (202, streaming pro MinIO)
 → video.uploaded → saga PROCESSING → video.process.requested
 → ffmpeg extrai frames + zip → video.processing.completed
 → saga COMPLETED → video.status.completed (upload-service) + video.notify.requested (e-mail)
-→ GET /videos mostra COMPLETED → GET /videos/{id}/download retorna URL pré-assinada
+→ GET /api/v1/videos mostra COMPLETED → GET /api/v1/videos/{id}/download retorna URL pré-assinada
 ```
 Verificado ao vivo contra a stack real: do upload ao `COMPLETED`, menos de 2 segundos (3
 frames extraídos de um vídeo de amostra), e-mail de conclusão recebido no Mailhog, `.zip`
@@ -259,15 +258,15 @@ baixado com sucesso.
 
 **Caminho de falha:**
 ```
-POST /videos (arquivo inválido, ex: .txt renomeado para .mp4) → 202 aceito
+POST /api/v1/videos (arquivo inválido, ex: .txt renomeado para .mp4) → 202 aceito
 → ffmpeg falha ao processar → video.processing.failed (com error_message real do ffmpeg)
 → saga FAILED → video.status.failed + video.notify.requested (tipo FAILED)
-→ GET /videos mostra FAILED com error_message → e-mail de falha recebido no Mailhog
+→ GET /api/v1/videos mostra FAILED com error_message → e-mail de falha recebido no Mailhog
 ```
 Verificado ao vivo da mesma forma, com o `error_message` sendo a saída real do `ffmpeg`, não
 uma mensagem genérica.
 
-**Teste de carga (pico de requisições):** `scripts/load_spike_test.sh` dispara N uploads
+**Teste de carga (pico de requisições):** `fiapx-saga-orchestrator/scripts/load_spike_test.sh` dispara N uploads
 concorrentes e confirma que todos são aceitos e todos completam — verificado com N=20, 50 e
 100, sem nenhuma requisição perdida ou rejeitada, e 0 mensagens em qualquer DLQ em qualquer
 execução.
@@ -287,11 +286,13 @@ git clone https://github.com/gabrielAnFran/fiapx-saga-orchestrator
 
 # Subir a stack completa (4 serviços + Postgres x4 + RabbitMQ + MinIO + Mailhog)
 cd fiapx-saga-orchestrator/deploy/local
-docker compose up -d --build
+# COMPOSE_PARALLEL_LIMIT=1 evita estouro de memória do Docker Desktop ao compilar os binários Go
+COMPOSE_PARALLEL_LIMIT=1 docker compose build
+docker compose up -d
 
 # Rodar a demonstração completa (golden path + caminho de falha + teste de carga)
 # de uma vez, com explicação de cada passo:
-../scripts/demo.sh
+../../scripts/demo.sh
 ```
 
 Roteiro manual passo a passo (curl) em

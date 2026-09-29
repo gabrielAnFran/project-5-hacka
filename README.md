@@ -42,4 +42,4 @@ para o roteiro completo de demonstração (registro → login → upload → sta
 - ✅ Documentação da arquitetura — `docs/architecture.md` + `docs/adr/`
 - ✅ Scripts de criação de banco de dados — `migrations/*.sql` em cada repositório de serviço, resumidos em `docs/db-schema.md`
 - ✅ Código versionado no GitHub — 4 repositórios de serviço + este
-- ⏳ Vídeo de apresentação (≤10min) — roteiro em `docs/runbook.md`
+- ✅ Vídeo de apresentação (≤10min) — link em [`ENTREGAVEL.md`](ENTREGAVEL.md#1-vídeo-de-demonstração)
